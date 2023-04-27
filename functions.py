@@ -3,10 +3,9 @@ import logging
 
 from postgres import (
     thermostat_table,
-    zone_table,
     controller_table,
     building_table,
-    zip_code_table,
+    zip_code_table, boiler_table,
 )
 
 from redis_dir.utils import fetch_online_status_from_online_stream
@@ -135,20 +134,7 @@ async def thermostat_data(serial_num: str, connection_cold, connection_main, con
 
     if th_data:
         status = fetch_online_status_from_online_stream(th_data["timestamp"])
-        query = (
-            thermostat_table.select()
-            .join(zone_table)
-            .join(controller_table)
-            .join(building_table)
-            .join(zip_code_table)
-            .where(thermostat_table.c.serial_num == serial_num)
-            .with_only_columns(zip_code_table.c.todays_temp)
-        )
-        try:
-            outdoor_temp = connection_main.execute(query).fetchone()[0]
-        except Exception as e:
-            outdoor_temp = None
-            logging.error(f"Unable to fetch temperature data from {serial_num} MAIN db: {e}")
+
         if not status["data"]:
             try:
                 error_statement = errors.insert().values(
@@ -160,6 +146,21 @@ async def thermostat_data(serial_num: str, connection_cold, connection_main, con
                 connection_cold.commit()
             except Exception as e:
                 logging.error(f"Unable to fetch relay from {serial_num} IoT db: {e}")
+
+        query = (
+            thermostat_table.select()
+            .join(boiler_table)
+            .join(controller_table)
+            .join(building_table)
+            .join(zip_code_table)
+            .where(thermostat_table.c.serial_num == serial_num)
+            .with_only_columns(zip_code_table.c.todays_temp)
+        )
+        try:
+            outdoor_temp = connection_main.execute(query).fetchone()[0]
+        except Exception as e:
+            outdoor_temp = None
+            logging.error(f"Unable to fetch temperature data from {serial_num} MAIN db: {e}")
         try:
             cycle_statement = (
                 cycles.select()
@@ -274,6 +275,18 @@ async def controller_data(serial_num: str, conn_cold, conn_main, connection_redi
             .with_only_columns(zip_code_table.c.todays_temp)
         )
 
+        if not status["data"]:
+            try:
+                error_statement = errors.insert().values(
+                    sn=serial_num,
+                    error_code=101,
+                    timestamp=now
+                )
+                conn_cold.execute(error_statement)
+                conn_cold.commit()
+            except Exception as e:
+                logging.error(f"Unable to fetch relay from {serial_num} IoT db: {e}")
+
         try:
             outdoor_temp = conn_main.execute(query).fetchone()[0]
         except Exception as e:
@@ -281,18 +294,6 @@ async def controller_data(serial_num: str, conn_cold, conn_main, connection_redi
             logging.error(f"Unable to fetch temperature data from {serial_num} MAIN db: {e}")
 
         try:
-            if not status["data"]:
-                try:
-                    error_statement = errors.insert().values(
-                        sn=serial_num,
-                        error_code=101,
-                        timestamp=now
-                    )
-                    conn_cold.execute(error_statement)
-                    conn_cold.commit()
-                except Exception as e:
-                    logging.error(f"Unable to fetch relay from {serial_num} IoT db: {e}")
-
             select_statement = (
                 controller_temp_fluctuation.select()
                 .where(controller_temp_fluctuation.c.sn == serial_num)

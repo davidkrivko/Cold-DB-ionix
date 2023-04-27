@@ -5,7 +5,7 @@ import pytz
 from redis_dir.daos import redis_dao
 
 
-DEVICE_ONLINE_STATUS_DELTA_SEC = 30
+DEVICE_ONLINE_STATUS_DELTA_SEC = 60
 dao = redis_dao
 
 utc_tz = pytz.timezone('UTC')

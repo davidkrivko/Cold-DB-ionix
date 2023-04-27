@@ -17,8 +17,8 @@ thermostat_table = Table(
     extend_existing=True,
 )
 
-zone_table = Table(
-    'properties_zonemodel',
+boiler_table = Table(
+    'devices_boilermodel',
     meta,
     extend_existing=True,
 )
