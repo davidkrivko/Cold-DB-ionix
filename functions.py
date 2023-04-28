@@ -25,7 +25,6 @@ from sqlalchemy.sql.sqltypes import Boolean
 from redis_dir.daos import RedisDao
 
 dao = RedisDao()
-now = datetime.datetime.now()
 
 IOT_DB_NAME = "colddb"
 IOT_DB_USER = "admin"
@@ -131,21 +130,32 @@ setpoint_data = Table(
 
 async def thermostat_data(serial_num: str, connection_cold, connection_main, connection_redis) -> None:
     th_data = dao.get_paired_thermostat_data(serial_num, connection_redis)
+    now = datetime.datetime.now()
 
     if th_data:
         status = fetch_online_status_from_online_stream(th_data["timestamp"])
 
         if not status["data"]:
             try:
-                error_statement = errors.insert().values(
-                    sn=serial_num,
-                    error_code=101,
-                    timestamp=now
+                status_statement = (
+                    errors.select()
+                    .where(errors.c.sn == serial_num)
+                    .order_by(desc("timestamp"))
+                    .limit(THERMOSTAT_QUERY_LIMIT)
                 )
-                connection_cold.execute(error_statement)
-                connection_cold.commit()
+                result_set = connection_cold.execute(status_statement)
+                rows = result_set.fetchall()
+                status_date = rows[0][-1]
+                if status_date.date() != datetime.date.today():
+                    error_statement = errors.insert().values(
+                        sn=serial_num,
+                        error_code=101,
+                        timestamp=datetime.datetime.now()
+                    )
+                    connection_cold.execute(error_statement)
+                    connection_cold.commit()
             except Exception as e:
-                logging.error(f"Unable to fetch relay from {serial_num} IoT db: {e}")
+                logging.error(f"Unexpected error occurred while querying IoT db for {serial_num}: {e}")
 
         query = (
             thermostat_table.select()
@@ -262,6 +272,7 @@ async def thermostat_data(serial_num: str, connection_cold, connection_main, con
 
 
 async def controller_data(serial_num: str, conn_cold, conn_main, connection_redis) -> None:
+    now = datetime.datetime.now()
     data = []
     ctr_data = dao.get_paired_relay_controller_data(serial_num, connection_redis)
 
@@ -277,13 +288,23 @@ async def controller_data(serial_num: str, conn_cold, conn_main, connection_redi
 
         if not status["data"]:
             try:
-                error_statement = errors.insert().values(
-                    sn=serial_num,
-                    error_code=101,
-                    timestamp=now
+                status_statement = (
+                    errors.select()
+                    .where(errors.c.sn == serial_num)
+                    .order_by(desc("timestamp"))
+                    .limit(THERMOSTAT_QUERY_LIMIT)
                 )
-                conn_cold.execute(error_statement)
-                conn_cold.commit()
+                result_set = conn_cold.execute(status_statement)
+                rows = result_set.fetchall()
+                status_date = rows[0][-1]
+                if status_date.date() != datetime.date.today():
+                    error_statement = errors.insert().values(
+                        sn=serial_num,
+                        error_code=101,
+                        timestamp=datetime.datetime.now()
+                    )
+                    conn_cold.execute(error_statement)
+                    conn_cold.commit()
             except Exception as e:
                 logging.error(f"Unable to fetch relay from {serial_num} IoT db: {e}")
 
