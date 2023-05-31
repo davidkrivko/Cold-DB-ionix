@@ -29,7 +29,7 @@ dao = RedisDao()
 IOT_DB_NAME = "colddb"
 IOT_DB_USER = "admin"
 IOT_DB_PASSWORD = "mMFavHYtuA-43LP4MXXdFaQMpdY5ye0l"
-IOT_DB_HOST = "24.199.82.101"
+IOT_DB_HOST = "localhost"
 IOT_DB_PORT = "5432"
 
 THERMOSTAT_QUERY_LIMIT = 1
