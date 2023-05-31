@@ -1,5 +1,4 @@
 import datetime
-import logging
 
 from postgres import (
     thermostat_table,
@@ -154,8 +153,8 @@ async def thermostat_data(serial_num: str, connection_cold, connection_main, con
                     )
                     connection_cold.execute(error_statement)
                     connection_cold.commit()
-            except Exception as e:
-                logging.error(f"Unexpected error occurred while querying IoT db for {serial_num}: {e}")
+            except:
+                pass
 
         query = (
             thermostat_table.select()
@@ -170,7 +169,6 @@ async def thermostat_data(serial_num: str, connection_cold, connection_main, con
             outdoor_temp = connection_main.execute(query).fetchone()[0]
         except Exception as e:
             outdoor_temp = None
-            logging.error(f"Unable to fetch temperature data from {serial_num} MAIN db: {e}")
         try:
             cycle_statement = (
                 cycles.select()
@@ -267,8 +265,8 @@ async def thermostat_data(serial_num: str, connection_cold, connection_main, con
                 )
                 connection_cold.execute(setpoint_statement)
                 connection_cold.commit()
-        except Exception as e:
-            logging.error(f"Unable to fetch relay from {serial_num} IoT db: {e}")
+        except:
+            pass
 
 
 async def controller_data(serial_num: str, conn_cold, conn_main, connection_redis) -> None:
@@ -305,8 +303,8 @@ async def controller_data(serial_num: str, conn_cold, conn_main, connection_redi
                     )
                     conn_cold.execute(error_statement)
                     conn_cold.commit()
-            except Exception as e:
-                logging.error(f"Unable to fetch relay from {serial_num} IoT db: {e}")
+            except:
+                pass
 
         try:
             outdoor_temp = conn_main.execute(query).fetchone()[0]
@@ -350,8 +348,8 @@ async def controller_data(serial_num: str, conn_cold, conn_main, connection_redi
                 )
                 conn_cold.execute(insert_statement)
                 conn_cold.commit()
-        except Exception as e:
-            logging.error(f"Unable to fetch boiler data from {serial_num} IoT db: {e}")
+        except:
+            pass
 
 
 # async def change_setpoint(serial_num: str) -> None:
