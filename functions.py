@@ -57,6 +57,7 @@ controller_temp_fluctuation = Table(
     Column("outdoor_temp", Numeric),
     Column("timestamp", DateTime),
     Column("sys_temp_2", Numeric),
+    Column("call_for_heat", Numeric),
     extend_existing=True,
 )
 
@@ -308,9 +309,8 @@ async def controller_data(serial_num: str, conn_cold, conn_main, connection_redi
 
         try:
             outdoor_temp = conn_main.execute(query).fetchone()[0]
-        except Exception as e:
+        except:
             outdoor_temp = None
-            logging.error(f"Unable to fetch temperature data from {serial_num} MAIN db: {e}")
 
         try:
             select_statement = (
@@ -332,6 +332,7 @@ async def controller_data(serial_num: str, conn_cold, conn_main, connection_redi
                             outdoor_temp=outdoor_temp,
                             timestamp=now,
                             sys_temp_2=int(ctr_data["t2"]),
+                            call_for_heat=ctr_data["relay"],
                         )
                     )
                     conn_cold.execute(insert_statement)
@@ -344,6 +345,7 @@ async def controller_data(serial_num: str, conn_cold, conn_main, connection_redi
                         outdoor_temp=outdoor_temp,
                         timestamp=now,
                         sys_temp_2=int(ctr_data["t2"]),
+                        call_for_heat=ctr_data["relay"],
                     )
                 )
                 conn_cold.execute(insert_statement)
