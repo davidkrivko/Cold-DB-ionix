@@ -4,7 +4,8 @@ from postgres import (
     thermostat_table,
     controller_table,
     building_table,
-    zip_code_table, boiler_table,
+    zip_code_table,
+    boiler_table,
 )
 
 from redis_dir.utils import fetch_online_status_from_online_stream
@@ -123,7 +124,6 @@ setpoint_data = Table(
     Column("timestamp", DateTime),
     extend_existing=True,
 )
-
 
 # meta.create_all(db)
 
@@ -322,6 +322,10 @@ async def controller_data(serial_num: str, conn_cold, conn_main, connection_redi
             result_set = conn_cold.execute(select_statement)
             for r in result_set.all():
                 data.append(r)
+            try:
+                relay = int(ctr_data["relay"])
+            except:
+                relay = int(ctr_data["endswitch"])
             if data:
                 latest_record = data[0]
                 if int(ctr_data["t1"]) != latest_record[2]:
@@ -332,7 +336,7 @@ async def controller_data(serial_num: str, conn_cold, conn_main, connection_redi
                             outdoor_temp=outdoor_temp,
                             timestamp=now,
                             sys_temp_2=int(ctr_data["t2"]),
-                            call_for_heat=ctr_data["relay"],
+                            call_for_heat=relay,
                         )
                     )
                     conn_cold.execute(insert_statement)
@@ -345,7 +349,7 @@ async def controller_data(serial_num: str, conn_cold, conn_main, connection_redi
                         outdoor_temp=outdoor_temp,
                         timestamp=now,
                         sys_temp_2=int(ctr_data["t2"]),
-                        call_for_heat=ctr_data["relay"],
+                        call_for_heat=relay,
                     )
                 )
                 conn_cold.execute(insert_statement)
