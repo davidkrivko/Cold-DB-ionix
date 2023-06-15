@@ -29,7 +29,7 @@ dao = RedisDao()
 IOT_DB_NAME = "colddb"
 IOT_DB_USER = "admin"
 IOT_DB_PASSWORD = "mMFavHYtuA-43LP4MXXdFaQMpdY5ye0l"
-IOT_DB_HOST = "localhost"
+IOT_DB_HOST = "24.199.82.101"
 IOT_DB_PORT = "5432"
 
 THERMOSTAT_QUERY_LIMIT = 1
@@ -166,7 +166,7 @@ def cycles_func(serial_num: str, conn_cold, relay):
 def online_status_check(serial_num: str, connection_cold, redis_data):
     status = fetch_online_status_from_online_stream(redis_data["timestamp"])
 
-    if not status["data"]:
+    if status["data"] is False:
         try:
             status_statement = (
                 errors.select()
@@ -348,14 +348,14 @@ async def controller_data(serial_num: str, conn_cold, conn_main, connection_redi
             pass
 
 
-async def receiver_data(serial_num: str, conn_cold, connection_redis) -> None:
+def receiver_data(serial_num: str, conn_cold, connection_redis) -> None:
     res_data = dao.get_receiver_data(serial_num, connection_redis)
 
     if res_data:
         online_status_check(serial_num, conn_cold, res_data)
 
         try:
-            cycles_func(serial_num, conn_cold, res_data)
+            cycles_func(serial_num, conn_cold, res_data["relay"])
         except:
             pass
 
