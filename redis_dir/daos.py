@@ -1,14 +1,11 @@
 import datetime
-from abc import ABC, abstractmethod
-
 import redis
 
 from redis_dir.schemas import StreamsKeySchema
 from redis_dir.formatters import (
-    convert_payload_datatypes,
     decode_redis_hash,
 )
-from typing import List
+
 
 now = datetime.datetime.now()
 
@@ -34,6 +31,12 @@ class RedisDao:
 
     def get_paired_thermostat_data(self, sn: str, connection):
         key = streams_key_schema.paired_thermostat_key(sn)
+        raw_data = connection.hgetall(key)
+        data = decode_redis_hash(raw_data)
+        return data
+
+    def get_receiver_data(self, sn: str, connection):
+        key = streams_key_schema.receiver_key(sn)
         raw_data = connection.hgetall(key)
         data = decode_redis_hash(raw_data)
         return data

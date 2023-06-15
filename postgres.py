@@ -44,6 +44,20 @@ zip_code_table = Table(
 )
 
 
+receiver_table = Table(
+    "devices_receivermodel",
+    meta,
+    extend_existing=True,
+)
+
+
+switch_table = Table(
+    "devices_simpleswitchmodel",
+    meta,
+    extend_existing=True,
+)
+
+
 def list_of_thermostats(connection):
     query = thermostat_table.select().with_only_columns(thermostat_table.c.serial_num)
 
@@ -53,6 +67,20 @@ def list_of_thermostats(connection):
 
 def list_of_controller(connection):
     query = controller_table.select().with_only_columns(controller_table.c.serial_num)
+
+    result_set = connection.execute(query)
+    return [row[0] for row in result_set]
+
+
+def list_of_switches(connection):
+    query = switch_table.select().with_only_columns(switch_table.c.serial_num)
+
+    result_set = connection.execute(query)
+    return [row[0] for row in result_set]
+
+
+def list_of_receivers(connection):
+    query = receiver_table.select().with_only_columns(receiver_table.c.serial_num)
 
     result_set = connection.execute(query)
     return [row[0] for row in result_set]

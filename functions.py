@@ -5,7 +5,7 @@ from postgres import (
     controller_table,
     building_table,
     zip_code_table,
-    boiler_table,
+    boiler_table, switch_table,
 )
 
 from redis_dir.utils import fetch_online_status_from_online_stream
@@ -128,34 +128,73 @@ setpoint_data = Table(
 # meta.create_all(db)
 
 
+def cycles_func(serial_num: str, conn_cold, relay):
+    cycle_statement = (
+        cycles.select()
+        .where(cycles.c.sn == serial_num)
+        .order_by(desc("timestamp"))
+        .limit(THERMOSTAT_QUERY_LIMIT)
+    )
+    result_set = conn_cold.execute(cycle_statement)
+    cycle_data = result_set.fetchall()
+
+    now = datetime.datetime.now()
+    if cycle_data:
+        latest_record = cycle_data[0]
+        if bool(int(relay)) is not bool(latest_record[2]):
+            relay_statement = (
+                cycles.insert().values(
+                    sn=serial_num,
+                    value=bool(int(relay)),
+                    timestamp=now,
+                )
+            )
+            conn_cold.execute(relay_statement)
+            conn_cold.commit()
+    else:
+        relay_statement = (
+            cycles.insert().values(
+                sn=serial_num,
+                value=bool(int(relay)),
+                timestamp=now,
+            )
+        )
+        conn_cold.execute(relay_statement)
+        conn_cold.commit()
+
+
+def online_status_check(serial_num: str, connection_cold, redis_data):
+    status = fetch_online_status_from_online_stream(redis_data["timestamp"])
+
+    if not status["data"]:
+        try:
+            status_statement = (
+                errors.select()
+                .where(errors.c.sn == serial_num)
+                .order_by(desc("timestamp"))
+                .limit(THERMOSTAT_QUERY_LIMIT)
+            )
+            result_set = connection_cold.execute(status_statement)
+            rows = result_set.fetchall()
+            status_date = rows[0][-1]
+            if status_date.date() != datetime.date.today():
+                error_statement = errors.insert().values(
+                    sn=serial_num,
+                    error_code=101,
+                    timestamp=datetime.datetime.now()
+                )
+                connection_cold.execute(error_statement)
+                connection_cold.commit()
+        except:
+            pass
+
+
 async def thermostat_data(serial_num: str, connection_cold, connection_main, connection_redis) -> None:
     th_data = dao.get_paired_thermostat_data(serial_num, connection_redis)
     now = datetime.datetime.now()
 
     if th_data:
-        status = fetch_online_status_from_online_stream(th_data["timestamp"])
-
-        if not status["data"]:
-            try:
-                status_statement = (
-                    errors.select()
-                    .where(errors.c.sn == serial_num)
-                    .order_by(desc("timestamp"))
-                    .limit(THERMOSTAT_QUERY_LIMIT)
-                )
-                result_set = connection_cold.execute(status_statement)
-                rows = result_set.fetchall()
-                status_date = rows[0][-1]
-                if status_date.date() != datetime.date.today():
-                    error_statement = errors.insert().values(
-                        sn=serial_num,
-                        error_code=101,
-                        timestamp=datetime.datetime.now()
-                    )
-                    connection_cold.execute(error_statement)
-                    connection_cold.commit()
-            except:
-                pass
+        online_status_check(serial_num, connection_cold, th_data)
 
         query = (
             thermostat_table.select()
@@ -168,40 +207,10 @@ async def thermostat_data(serial_num: str, connection_cold, connection_main, con
         )
         try:
             outdoor_temp = connection_main.execute(query).fetchone()[0]
-        except Exception as e:
+        except:
             outdoor_temp = None
         try:
-            cycle_statement = (
-                cycles.select()
-                .where(cycles.c.sn == serial_num)
-                .order_by(desc("timestamp"))
-                .limit(THERMOSTAT_QUERY_LIMIT)
-            )
-            result_set = connection_cold.execute(cycle_statement)
-            cycle_data = result_set.fetchall()
-
-            if cycle_data:
-                latest_record = cycle_data[0]
-                if bool(int(th_data["relay"])) is not bool(latest_record[2]):
-                    relay_statement = (
-                        cycles.insert().values(
-                            sn=serial_num,
-                            value=bool(int(th_data["relay"])),
-                            timestamp=now,
-                        )
-                    )
-                    connection_cold.execute(relay_statement)
-                    connection_cold.commit()
-            else:
-                relay_statement = (
-                    cycles.insert().values(
-                        sn=serial_num,
-                        value=bool(int(th_data["relay"])),
-                        timestamp=now,
-                    )
-                )
-                connection_cold.execute(relay_statement)
-                connection_cold.commit()
+            cycles_func(serial_num, connection_cold, th_data["relay"])
 
             temp_th_statement = (
                 thermostat_temp_fluctuation.select()
@@ -276,7 +285,11 @@ async def controller_data(serial_num: str, conn_cold, conn_main, connection_redi
     ctr_data = dao.get_paired_relay_controller_data(serial_num, connection_redis)
 
     if ctr_data:
-        status = fetch_online_status_from_online_stream(ctr_data["timestamp"])
+        cycles_func(serial_num, conn_cold,
+                    ctr_data["relay"] if ctr_data.get("relay") is not None else ctr_data["endswitch"])
+
+        online_status_check(serial_num, conn_cold, ctr_data)
+
         query = (
             controller_table.select()
             .join(building_table)
@@ -284,29 +297,6 @@ async def controller_data(serial_num: str, conn_cold, conn_main, connection_redi
             .where(controller_table.c.serial_num == serial_num)
             .with_only_columns(zip_code_table.c.todays_temp)
         )
-
-        if not status["data"]:
-            try:
-                status_statement = (
-                    errors.select()
-                    .where(errors.c.sn == serial_num)
-                    .order_by(desc("timestamp"))
-                    .limit(THERMOSTAT_QUERY_LIMIT)
-                )
-                result_set = conn_cold.execute(status_statement)
-                rows = result_set.fetchall()
-                status_date = rows[0][-1]
-                if status_date.date() != datetime.date.today():
-                    error_statement = errors.insert().values(
-                        sn=serial_num,
-                        error_code=101,
-                        timestamp=datetime.datetime.now()
-                    )
-                    conn_cold.execute(error_statement)
-                    conn_cold.commit()
-            except:
-                pass
-
         try:
             outdoor_temp = conn_main.execute(query).fetchone()[0]
         except:
@@ -356,6 +346,32 @@ async def controller_data(serial_num: str, conn_cold, conn_main, connection_redi
                 conn_cold.commit()
         except:
             pass
+
+
+async def receiver_data(serial_num: str, conn_cold, connection_redis) -> None:
+    res_data = dao.get_receiver_data(serial_num, connection_redis)
+
+    if res_data:
+        online_status_check(serial_num, conn_cold, res_data)
+
+        try:
+            cycles_func(serial_num, conn_cold, res_data)
+        except:
+            pass
+
+
+async def switch_data(serial_num: str, conn_cold, conn_main) -> None:
+    query = (
+        switch_table.select()
+        .where(switch_table.c.serial_num == serial_num)
+        .with_only_columns(switch_table.c.status)
+    )
+    try:
+        status = conn_main.execute(query).fetchone()[0]
+    except:
+        return
+
+    cycles_func(serial_num, conn_cold, status)
 
 
 # async def change_setpoint(serial_num: str) -> None:
